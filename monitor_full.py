@@ -986,6 +986,13 @@ def main() -> None:
     # هنگام شروع، پروفایل ربات را تنظیم کن
     setup_bot_profile()
 
+    # 🎯 حالت تک‌بار (GitHub Actions): اسکن کن و تمام شو
+    # بدون --loop، فقط یک بار اجرا می‌شود
+    if not a.loop:
+        n = run_once(a.min_score, a.max_proposals)
+        safe_print(f"✅ {n} پروژه ارسال شد")
+        return
+
     # سرور keep-alive (فقط روی سرور فعال — روی سیستم محلی بی‌خطر است)
     if not a.no_keepalive:
         _keepalive_worker()
