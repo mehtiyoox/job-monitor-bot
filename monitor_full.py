@@ -786,6 +786,8 @@ def tg_answer(update: dict) -> None:
                 show_buttons=True)
     except Exception as e:
         safe_print(f"⚠️ خطای پردازش دستور: {e}")
+    finally:
+        LOOP_STATE["commands_handled"] += 1
 
 
 def poll_telegram_commands(idle_wait: int) -> None:
@@ -945,6 +947,18 @@ def backfill_proposals(limit: int = 10) -> int:
 KEEPALIVE_PORT = int(os.environ.get("PORT", "7860"))
 
 
+# ---------------------------------------------------------------------------
+# متغیرهای عمومی برای مانیتورینگ حلقه‌ی اصلی
+LOOP_STATE = {
+    "started_at": "",
+    "last_poll": "",
+    "polls": 0,
+    "last_scan": "",
+    "scans": 0,
+    "commands_handled": 0,
+}
+
+
 def _keepalive_worker() -> None:
     """سرور HTTP کوچک در یک thread جدا — پورت HF Space را پاسخ می‌دهد."""
     import threading
@@ -952,6 +966,16 @@ def _keepalive_worker() -> None:
 
     class H(BaseHTTPRequestHandler):
         def do_GET(self):
+            if self.path == "/state":
+                body = json.dumps(LOOP_STATE, ensure_ascii=False,
+                                  indent=1).encode()
+                self.send_response(200)
+                self.send_header("Content-Type",
+                                 "application/json; charset=utf-8")
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+                return
             try:
                 conn = init_db()
                 total = conn.execute(
@@ -1043,10 +1067,13 @@ def main() -> None:
     # حلقه‌ی مقاوم در برابر خطا — هرگز به‌طور کامل از کار نمی‌افتد
     # این حلقه هم اسکن دوره‌ای انجام می‌دهد و هم به دستورات تلگرام
     # پاسخ می‌دهد (long-polling).
+    LOOP_STATE["started_at"] = datetime.now().isoformat(timespec="seconds")
     last_scan = time.time()
     while True:
         # --- گوش دادن به دستورات تلگرام (۱۵ ثانیه) ---
         poll_telegram_commands(15)
+        LOOP_STATE["polls"] += 1
+        LOOP_STATE["last_poll"] = datetime.now().isoformat(timespec="seconds")
         # --- زمان اسکن دوره‌ای رسیده است؟ ---
         if time.time() - last_scan >= max(60, a.interval):
             safe_print(f"\n=== {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} "
@@ -1056,6 +1083,9 @@ def main() -> None:
                 safe_print(f"✅ {n} پروژه ارسال شد")
             except Exception as e:
                 safe_print(f"❌ خطا (ادامه می‌دهیم): {e}")
+            LOOP_STATE["scans"] += 1
+            LOOP_STATE["last_scan"] = datetime.now().isoformat(
+                timespec="seconds")
             last_scan = time.time()
 
 
