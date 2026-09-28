@@ -455,9 +455,15 @@ def is_deliverable_project(job: Job) -> bool:
 # اول Groq، بعد Gemini
 GROQ_MODELS = [
     "llama-3.3-70b-versatile",      # بهترین کیفیت
-    "llama-3.1-8b-instant",         # سریع، رایگان نامحدودتر
+    "llama-3.1-8b-instant",         # سریع
+    "qwen/qwen3-32b",
 ]
-FALLBACK_MODELS = [GEMINI_MODEL, "gemini-flash-lite-latest"]
+# Fallback به Gemini — روی سرورهای GitHub شاید Groq ۴۰۳ بدهد
+FALLBACK_MODELS = [
+    GEMINI_MODEL,
+    "gemini-flash-lite-latest",
+    "gemma-4-26b-a4b-it",
+]
 
 
 def _call_groq(model: str, prompt: str):
