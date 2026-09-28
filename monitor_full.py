@@ -769,9 +769,12 @@ def tg_answer(update: dict) -> None:
             conn = init_db()
             total = conn.execute(
                 "SELECT COUNT(*) FROM jobs WHERE is_project=1").fetchone()[0]
+            # chr(9888) = ⚠ — ایموجی را مستقیم در SQL نمی‌نویسیم (PostgreSQL
+            # با LIKE و ایموجی چندبایتی مشکل دارد)
             unsent = conn.execute(
                 "SELECT COUNT(*) FROM jobs WHERE is_project=1 AND "
-                "(proposal='' OR proposal LIKE '⚠️%')").fetchone()[0]
+                "(proposal = '' OR left(proposal, 1) = chr(9888))"
+            ).fetchone()[0]
             conn.close()
             tg_send(
                 "📊 *وضعیت ربات*\n\n"
@@ -932,7 +935,7 @@ def backfill_proposals(limit: int = 10) -> int:
     conn = init_db()
     rows = conn.execute(
         "SELECT url,title,company,location,budget,source,score,is_project,found_at "
-        "FROM jobs WHERE proposal = '' OR proposal LIKE '⚠️%' "
+        "FROM jobs WHERE proposal = '' OR left(proposal, 1) = chr(9888) "
         "ORDER BY is_project DESC, score DESC LIMIT %s", (limit,)).fetchall()
     if not rows:
         safe_print("✅ پیشنهاد معوقه‌ای نیست")
