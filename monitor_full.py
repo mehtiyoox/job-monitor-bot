@@ -979,21 +979,32 @@ def _keepalive_worker() -> None:
 
 
 def _self_ping() -> None:
-    """پینگ خودکار هر ۱۰ دقیقه برای جلوگیری از خوابیدن HF Space."""
+    """پینگ خودکار هر ۵ دقیقه برای جلوگیری از خوابیدن سرویس ابری."""
     import threading
-    host = os.environ.get("SPACE_HOST", "")
+    import socket
+    # شناسه‌ی سرویس از متغیرهای محیطی — روی Render و HF کار می‌کند
+    host = (os.environ.get("RENDER_EXTERNAL_URL")
+            or os.environ.get("SPACE_HOST")
+            or "").replace("https://", "").replace("http://", "")
     if not host:
-        return  # فقط روی HF Space فعال است
+        return  # فقط روی سرویس ابری فعال است
 
     def ping():
         while True:
             try:
-                time.sleep(600)  # ۱۰ دقیقه
-                url = f"https://{host}/" if not host.startswith("http") else host
+                time.sleep(280)  # ~۵ دقیقه
+                url = f"https://{host}/"
                 req = urllib.request.Request(url, headers=HEADERS)
                 urllib.request.urlopen(req, timeout=30)
             except Exception:
-                pass
+                # fallback: پورت محلی
+                try:
+                    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                    s.settimeout(5)
+                    s.connect(("127.0.0.1", KEEPALIVE_PORT))
+                    s.close()
+                except Exception:
+                    pass
 
     threading.Thread(target=ping, daemon=True).start()
 

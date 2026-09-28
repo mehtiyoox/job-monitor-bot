@@ -1,0 +1,33 @@
+services:
+  - type: web
+    name: job-monitor-bot
+    runtime: python
+    plan: free
+    # هر ساعت اسکن + همیشه به دستورات تلگرام گوش می‌دهد
+    startCommand: python -u monitor_full.py --loop --interval 3600 --min-score 5 --max-proposals 3
+    envVars:
+      - key: PYTHONIOENCODING
+        value: utf-8
+      - key: PYTHONUTF8
+        value: "1"
+      - key: PYTHONUNBUFFERED
+        value: "1"
+      - key: USE_PROXY
+        value: "0"
+      - key: LOCAL_RUN
+        value: "0"
+      - key: PORT
+        value: "10000"
+      # کلیدها به‌صورت secret تنظیم می‌شوند
+      - key: TG_BOT_TOKEN
+        sync: false
+      - key: TG_CHAT_ID
+        sync: false
+      - key: GROQ_KEY
+        sync: false
+      - key: GEMINI_KEY
+        sync: false
+      - key: DATABASE_URL
+        sync: false
+    healthCheckPath: /
+    autoDeploy: true
