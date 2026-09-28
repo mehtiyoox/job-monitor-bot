@@ -458,11 +458,12 @@ GROQ_MODELS = [
     "llama-3.1-8b-instant",         # سریع
     "qwen/qwen3-32b",
 ]
-# Fallback به Gemini — روی سرورهای GitHub شاید Groq ۴۰۳ بدهد
+# Fallback به Gemini — ترتیب بر اساس دسترس‌پذیری روی سرورهای ابری
+# (gemma روی GitHub Actions کار می‌کند، مدل‌های flash گاهی ۵۰۳ می‌دهند)
 FALLBACK_MODELS = [
+    "gemma-4-26b-a4b-it",
     GEMINI_MODEL,
     "gemini-flash-lite-latest",
-    "gemma-4-26b-a4b-it",
 ]
 
 
@@ -521,7 +522,7 @@ def generate_proposal(job: Job) -> str:
 مهارت‌های ما: ساخت ربات تلگرام، اتوماسیون فرایندها، ایجنت هوشمند،
 پایتون، وب‌اسکریپر، اتصال سرویس‌ها به هم."""
 
-    # ۱) اول Groq (سریع و رایگان)
+    # ۱) Groq (سریع‌ترین) — روی شبکه‌ی محلی کار می‌کند
     if GROQ_KEY:
         for i, model in enumerate(GROQ_MODELS):
             ok, result = _call_groq(model, prompt)
@@ -532,7 +533,8 @@ def generate_proposal(job: Job) -> str:
                 time.sleep(min(5 * (i + 1), 10))
                 continue
 
-    # ۲) Fallback به Gemini
+    # ۲) Fallback به Gemini — ترتیب: مدل‌های سبک‌تر اول
+    # (روی سرورهای GitHub مدل‌های سنگین‌تر ۵۰۳ می‌دهند)
     if GEMINI_KEY:
         for i, model in enumerate(FALLBACK_MODELS):
             ok, result = _call_gemini(model, prompt)
@@ -540,7 +542,7 @@ def generate_proposal(job: Job) -> str:
                 return result
             if isinstance(result, int) and result in (429, 503):
                 safe_print(f"   ⏳ {model} شلوغ ({result}) — سراغ بعدی")
-                time.sleep(min(5 * (i + 1), 10))
+                time.sleep(min(3 * (i + 1), 8))
                 continue
 
     return "⚠️ همه‌ی مدل‌ها شلوغ هستند — بعداً."
