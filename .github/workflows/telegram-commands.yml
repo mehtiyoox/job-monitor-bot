@@ -22,6 +22,9 @@ jobs:
         with:
           python-version: '3.12'
 
+      - name: نصب وابستگی‌ها
+        run: pip install -r requirements.txt || true
+
       - name: بررسی دستورات تلگرام
         env:
           TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
