@@ -790,7 +790,10 @@ def tg_answer(update: dict) -> None:
                 "📊 /status — وضعیت",
                 show_buttons=True)
     except Exception as e:
+        import traceback
+        err = traceback.format_exc()[-300:]
         safe_print(f"⚠️ خطای پردازش دستور: {e}")
+        _log_message(f"ERROR: {err[:150]}")
     finally:
         LOOP_STATE["commands_handled"] += 1
 
