@@ -178,15 +178,16 @@ HEADERS = {
 }
 
 
-def fetch(url: str, timeout: int = 25, proxy: bool = False) -> Optional[str]:
+def fetch(url: str, timeout: int = 15, proxy: bool = False) -> Optional[str]:
     opener = OPENER if proxy else NO_PROXY
     req = urllib.request.Request(url, headers=HEADERS)
     for attempt in range(2):
         try:
             with opener.open(req, timeout=timeout) as r:
                 return r.read().decode("utf-8", errors="replace")
-        except Exception:
+        except Exception as e:
             if attempt == 1:
+                safe_print(f"      ⚠️ fetch ناموفق: {url[:50]} ({type(e).__name__})")
                 return None
             time.sleep(2)
 
@@ -362,7 +363,7 @@ def post_parscoders_search(keyword: str) -> list[Job]:
         "Referer": "https://www.parscoders.com/project/only-available/1",
     })
     try:
-        with NO_PROXY.open(req, timeout=25) as r:
+        with NO_PROXY.open(req, timeout=20) as r:
             payload = json.loads(r.read().decode("utf-8", errors="replace"))
     except Exception:
         return []
@@ -802,29 +803,37 @@ SOURCES = [
 def run_once(min_score: int = 5, max_proposals: int = MAX_PROPOSALS_PER_RUN) -> int:
     """یک دور کامل جستجو. فقط max_proposals متن پیشنهاد تولید می‌کند
     تا سهمیه‌ی Gemini تمام نشود."""
+    safe_print("🔌 اتصال به دیتابیس...")
     conn = init_db()
+    safe_print("✅ دیتابیس آماده")
     # جابجایی تصادفی ترتیب منابع
     sources = SOURCES[:]
     random.shuffle(sources)
 
     candidates: list[Job] = []
     for name, target in sources:
-        safe_print(f"⏳ [{name}]")
+        safe_print(f"⏳ [{name}] — شروع")
+        t0 = time.time()
         jobs: list[Job] = []
-        if target.startswith("http"):
-            html = fetch(target, proxy=False)
-            if not html:
-                safe_print("   ❌ ناموفق")
-                continue
-            if "parscoders" in target:
-                jobs = parse_parscoders(html)
+        try:
+            if target.startswith("http"):
+                html = fetch(target, proxy=False)
+                if not html:
+                    safe_print("   ❌ ناموفق")
+                    continue
+                if "parscoders" in target:
+                    jobs = parse_parscoders(html)
+                else:
+                    jobs = parse_jobinja(html)
             else:
-                jobs = parse_jobinja(html)
-        else:
-            # کلمه‌کلیدی پارسکدرز
-            jobs = post_parscoders_search(target)
+                # کلمه‌کلیدی پارسکدرز
+                jobs = post_parscoders_search(target)
+        except Exception as e:
+            safe_print(f"   ❌ خطا در [{name}]: {type(e).__name__} — رد می‌شود")
+            continue
         new = [j for j in jobs if is_new(conn, j.url) and is_good_for_us(j, min_score)]
-        safe_print(f"   📄 {len(jobs)} آگهی، {len(new)} مورد مناسب")
+        safe_print(f"   📄 {len(jobs)} آگهی، {len(new)} مورد مناسب "
+                   f"({time.time()-t0:.1f}s)")
         candidates.extend(new)
         time.sleep(random.uniform(1.5, 3))
 
