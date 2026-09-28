@@ -1,10 +1,9 @@
 name: Telegram Commands
 
-# هر ۱۵ دقیقه دستورات تلگرام را بررسی می‌کند
-# (هر ۵ دقیقه سهمیه‌ی GitHub Actions را تمام می‌کند)
+# هر ۵ دقیقه دستورات تلگرام را بررسی می‌کند
 on:
   schedule:
-    - cron: '*/15 * * * *'
+    - cron: '*/5 * * * *'
   workflow_dispatch:
 
 concurrency:
@@ -41,30 +40,45 @@ jobs:
           timeout 150 python - << 'PYEOF'
           import sys, os, time, json, urllib.request
           sys.path.insert(0, ".")
+          print("۱. بارگذاری ماژول", flush=True)
           import importlib.util
           spec = importlib.util.spec_from_file_location("mf", "monitor_full.py")
           m = importlib.util.module_from_spec(spec)
           sys.modules["mf"] = m
           spec.loader.exec_module(m)
 
-          # آفست ذخیره‌شده را بخوان (در GitHub Actions بین اجراها پایدار نیست،
-          # پس فقط آخرین پیام‌ها را می‌خوانیم)
+          # offset ذخیره‌شده را بخوان
           api = f"https://api.telegram.org/bot{m.TG_BOT_TOKEN}"
-          # با offset=-1 آخرین update را می‌گیریم
+          # اول با offset=-1 آخرین update‌ها را بگیر تا offset راستش را پیدا کنیم
           try:
-              req = urllib.request.Request(
-                  f"{api}/getUpdates?timeout=1&offset={m.TG_OFFSET}")
+              req = urllib.request.Request(f"{api}/getUpdates?offset=-1")
               with urllib.request.urlopen(req, timeout=20) as r:
                   d = json.loads(r.read().decode())
+              if d.get("result"):
+                  last_id = d["result"][-1].get("update_id", 0)
+                  # offset ذخیره شده را از دیتابیس بخوان
+                  saved = m.load_tg_offset()
+                  print(f"۲. offset ذخیره شده: {saved}, آخرین update: {last_id}", flush=True)
+                  # اگر پیام جدیدی هست، پردازش کن
+                  if last_id >= saved:
+                      req2 = urllib.request.Request(
+                          f"{api}/getUpdates?offset={saved}&timeout=1")
+                      with urllib.request.urlopen(req2, timeout=30) as r2:
+                          d2 = json.loads(r2.read().decode())
+                      n = 0
+                      for upd in d2.get("result", []):
+                          m.TG_OFFSET = upd.get("update_id", 0) + 1
+                          try:
+                              m.tg_answer(upd)
+                              n += 1
+                          except Exception as e:
+                              print(f"خطا در پردازش: {e}", flush=True)
+                      m.save_tg_offset(m.TG_OFFSET)
+                      print(f"۳. {n} دستور پردازش شد", flush=True)
+                  else:
+                      print("۳. پیام جدیدی نیست", flush=True)
+              else:
+                  print("۳. هیچ آپدیتی وجود ندارد", flush=True)
           except Exception as e:
-              print("خطا در getUpdates:", e, flush=True)
-              sys.exit(0)
-
-          for upd in d.get("result", []):
-              m.TG_OFFSET = upd.get("update_id", 0) + 1
-              try:
-                  m.tg_answer(upd)
-              except Exception as e:
-                  print("خطا در پردازش:", e, flush=True)
-          print(f"پردازش {len(d.get('result', []))} دستور", flush=True)
+              print("خطا:", e, flush=True)
           PYEOF
