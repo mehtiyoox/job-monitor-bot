@@ -712,10 +712,15 @@ def tg_answer(update: dict) -> None:
         msg = update.get("message") or update.get("edited_message") or {}
         text = (msg.get("text") or "").strip()
         chat = msg.get("chat", {}).get("id")
+        # لاگ برای دیباگ (همه‌ی پیام‌ها)
+        _log_message(f"chat={chat} text={text[:40]!r}")
+        safe_print(f"📨 پیام دریافت شد: chat={chat} text={text[:40]!r}")
         if chat is None or not text:
             return
         # فقط از صاحب حساب اجازه‌ی کنترل داریم
         if TG_CHAT_ID and str(chat) != str(TG_CHAT_ID):
+            _log_message(f"رد شد: chat={chat}")
+            safe_print(f"⚠️ chat={chat} مجاز نیست (مورد انتظار {TG_CHAT_ID})")
             return
         # 🎯 تطبیق روی کل متن دکمه (نه فقط کلمه‌ی اول) — دکمه‌ها چند کلمه‌ای هستند
         full = text.strip()
@@ -788,6 +793,14 @@ def tg_answer(update: dict) -> None:
         safe_print(f"⚠️ خطای پردازش دستور: {e}")
     finally:
         LOOP_STATE["commands_handled"] += 1
+
+
+def _log_message(text: str) -> None:
+    """پیام‌های اخیر را برای دیباگ نگه می‌دارد."""
+    lst = LOOP_STATE["recent_messages"]
+    lst.append(f"{datetime.now().strftime('%H:%M:%S')} {text}")
+    if len(lst) > 20:
+        del lst[0]
 
 
 def poll_telegram_commands(idle_wait: int) -> None:
@@ -956,6 +969,7 @@ LOOP_STATE = {
     "last_scan": "",
     "scans": 0,
     "commands_handled": 0,
+    "recent_messages": [],  # ۲۰ پیام اخیر برای دیباگ
 }
 
 
