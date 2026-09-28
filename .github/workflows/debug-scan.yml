@@ -1,0 +1,91 @@
+name: Debug Scan
+
+on:
+  workflow_dispatch:
+
+jobs:
+  debug:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: نصب وابستگی‌ها
+        run: pip install -r requirements.txt || true
+
+      - name: تنظیم کلیدها
+        env:
+          TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
+          TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
+          GROQ_KEY: ${{ secrets.GROQ_KEY }}
+          GEMINI_KEY: ${{ secrets.GEMINI_KEY }}
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: |
+          cat > .env << 'EOF'
+          TG_BOT_TOKEN=${TG_BOT_TOKEN}
+          TG_CHAT_ID=${TG_CHAT_ID}
+          GROQ_KEY=${GROQ_KEY}
+          GEMINI_KEY=${GEMINI_KEY}
+          DATABASE_URL=${DATABASE_URL}
+          GEMINI_MODEL=gemini-3.8-flash
+          MAX_PROPOSALS_PER_RUN=3
+          EOF
+
+      - name: تست گام به گام
+        env:
+          USE_PROXY: '0'
+          LOCAL_RUN: '0'
+          PYTHONIOENCODING: utf-8
+          PYTHONUTF8: '1'
+        run: |
+          python - << 'PYEOF'
+          import sys, os, time
+          sys.path.insert(0, ".")
+          print("۱. وارد کردن ماژول...", flush=True)
+          import importlib.util
+          spec = importlib.util.spec_from_file_location("mf", "monitor_full.py")
+          m = importlib.util.module_from_spec(spec)
+          sys.modules["mf"] = m
+          spec.loader.exec_module(m)
+          print("✅ ماژول وارد شد", flush=True)
+
+          print("۲. تست اتصال تلگرام...", flush=True)
+          import urllib.request, json
+          try:
+              req = urllib.request.Request(f"https://api.telegram.org/bot{m.TG_BOT_TOKEN}/getMe")
+              with urllib.request.urlopen(req, timeout=15) as r:
+                  d = json.loads(r.read().decode())
+                  print("✅ تلگرام:", d["result"]["username"], flush=True)
+          except Exception as e:
+              print("❌ تلگرام:", e, flush=True)
+
+          print("۳. تست اتصال Postgres...", flush=True)
+          try:
+              t0 = time.time()
+              conn = m.init_db()
+              print(f"✅ Postgres وصل شد در {time.time()-t0:.1f}s", flush=True)
+              conn.close()
+          except Exception as e:
+              print("❌ Postgres:", e, flush=True)
+
+          print("۴. تست Groq...", flush=True)
+          try:
+              ok, r = m._call_groq("llama-3.3-70b-versatile", "سلام")
+              print("✅ Groq:", "OK" if ok else r, flush=True)
+          except Exception as e:
+              print("❌ Groq:", e, flush=True)
+
+          print("۵. تست fetch پارسکدرز...", flush=True)
+          try:
+              t0 = time.time()
+              html = m.fetch("https://www.parscoders.com/project/only-available/1", timeout=20)
+              print(f"✅ پارسکدرز: {len(html or '')} بایت در {time.time()-t0:.1f}s", flush=True)
+          except Exception as e:
+              print("❌ پارسکدرز:", e, flush=True)
+          print("۶. پایان", flush=True)
+          PYEOF
