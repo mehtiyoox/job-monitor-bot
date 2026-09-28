@@ -21,7 +21,7 @@ concurrency:
 jobs:
   scan:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 12
 
     steps:
       - name: 📥 دریافت کد
@@ -37,38 +37,16 @@ jobs:
           pip install --upgrade pip
           pip install -r requirements.txt || true
 
-      - name: 🔐 تنظیم کلیدها از GitHub Secrets
+      - name: 🔍 اجرای اسکن پروژه‌ها
+        # کلیدها مستقیم از secrets به env — نه از طریق فایل .env
         env:
           TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
           TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
           GROQ_KEY: ${{ secrets.GROQ_KEY }}
           GEMINI_KEY: ${{ secrets.GEMINI_KEY }}
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
-        run: |
-          # ساخت فایل .env از secrets
-          cat > .env << 'EOF'
-          TG_BOT_TOKEN=${TG_BOT_TOKEN}
-          TG_CHAT_ID=${TG_CHAT_ID}
-          GROQ_KEY=${GROQ_KEY}
-          GEMINI_KEY=${GEMINI_KEY}
-          DATABASE_URL=${DATABASE_URL}
-          GEMINI_MODEL=gemini-3.8-flash
-          MAX_PROPOSALS_PER_RUN=3
-          EOF
-          echo "✅ فایل .env ساخته شد"
-          # بررسی
-          python -c "import ast; ast.parse(open('monitor_full.py', encoding='utf-8').read()); print('syntax OK')"
-
-      - name: 🔄 بازیابی دیتابیس کش شده
-        uses: actions/cache@v4
-        with:
-          path: jobs.db
-          key: jobs-db-v1
-          restore-keys: |
-            jobs-db-v1
-
-      - name: 🔍 اجرای اسکن پروژه‌ها
-        env:
+          GEMINI_MODEL: gemini-3.8-flash
+          MAX_PROPOSALS_PER_RUN: '3'
           USE_PROXY: '0'
           LOCAL_RUN: '0'
           PYTHONIOENCODING: utf-8
@@ -79,9 +57,3 @@ jobs:
             --min-score 5 \
             --max-proposals ${{ github.event.inputs.max_proposals || '3' }} \
             --no-keepalive
-
-      - name: 💾 ذخیره‌ی دیتابیس
-        uses: actions/cache@v4
-        with:
-          path: jobs.db
-          key: jobs-db-v1
