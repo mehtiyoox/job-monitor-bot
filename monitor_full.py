@@ -590,6 +590,31 @@ def notify(job: Job, proposal: str) -> None:
 # ---------------------------------------------------------------------------
 TG_OFFSET = 0  # شمارنده‌ی update برای long-polling
 
+
+def load_tg_offset() -> int:
+    """خواندن offset ذخیره‌شده (برای پایداری بین اجراها)"""
+    try:
+        conn = init_db()
+        r = conn.execute("SELECT value FROM meta WHERE key=%s",
+                         ("tg_offset",)).fetchone()
+        conn.close()
+        return int(r[0]) if r else 0
+    except Exception:
+        return 0
+
+
+def save_tg_offset(offset: int) -> None:
+    """ذخیره‌ی offset برای اجرای بعدی"""
+    try:
+        conn = init_db()
+        conn.execute("""INSERT INTO meta (key, value) VALUES ('tg_offset', %s)
+            ON CONFLICT (key) DO UPDATE SET value=EXCLUDED.value""",
+                     (str(offset),))
+        conn.commit()
+        conn.close()
+    except Exception:
+        pass
+
 # ---------------------------------------------------------------------------
 # هویت و پروفایل ربات
 # ---------------------------------------------------------------------------
@@ -768,6 +793,9 @@ def poll_telegram_commands(idle_wait: int) -> None:
     این تابع هرگز کرش نمی‌کند — در حلقه‌ی اصلی صدا زده می‌شود."""
     global TG_OFFSET
     try:
+        # offset ذخیره‌شده را بارگذاری کن (برای اجراهای کوتاه مثل GitHub Actions)
+        if TG_OFFSET == 0:
+            TG_OFFSET = load_tg_offset()
         url = (f"https://api.telegram.org/bot{TG_BOT_TOKEN}/getUpdates"
                f"?timeout={idle_wait}&offset={TG_OFFSET}")
         req = urllib.request.Request(url, headers=HEADERS)
@@ -776,6 +804,9 @@ def poll_telegram_commands(idle_wait: int) -> None:
         for upd in payload.get("result", []):
             TG_OFFSET = upd.get("update_id", 0) + 1
             tg_answer(upd)
+        # offset را برای اجرای بعدی ذخیره کن
+        if TG_OFFSET > 0:
+            save_tg_offset(TG_OFFSET)
     except Exception:
         pass  # خطای موقت — در دور بعدی دوباره تلاش می‌کند
 

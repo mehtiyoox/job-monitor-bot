@@ -1,0 +1,66 @@
+name: Telegram Commands
+
+# هر ۵ دقیقه دستورات تلگرام را بررسی می‌کند
+on:
+  schedule:
+    - cron: '*/5 * * * *'
+  workflow_dispatch:
+
+concurrency:
+  group: tg-commands
+  cancel-in-progress: true
+
+jobs:
+  poll:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: بررسی دستورات تلگرام
+        env:
+          TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
+          TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
+          GROQ_KEY: ${{ secrets.GROQ_KEY }}
+          GEMINI_KEY: ${{ secrets.GEMINI_KEY }}
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          USE_PROXY: '0'
+          LOCAL_RUN: '0'
+          PYTHONIOENCODING: utf-8
+          PYTHONUTF8: '1'
+        run: |
+          timeout 150 python - << 'PYEOF'
+          import sys, os, time, json, urllib.request
+          sys.path.insert(0, ".")
+          import importlib.util
+          spec = importlib.util.spec_from_file_location("mf", "monitor_full.py")
+          m = importlib.util.module_from_spec(spec)
+          sys.modules["mf"] = m
+          spec.loader.exec_module(m)
+
+          # آفست ذخیره‌شده را بخوان (در GitHub Actions بین اجراها پایدار نیست،
+          # پس فقط آخرین پیام‌ها را می‌خوانیم)
+          api = f"https://api.telegram.org/bot{m.TG_BOT_TOKEN}"
+          # با offset=-1 آخرین update را می‌گیریم
+          try:
+              req = urllib.request.Request(
+                  f"{api}/getUpdates?timeout=1&offset={m.TG_OFFSET}")
+              with urllib.request.urlopen(req, timeout=20) as r:
+                  d = json.loads(r.read().decode())
+          except Exception as e:
+              print("خطا در getUpdates:", e, flush=True)
+              sys.exit(0)
+
+          for upd in d.get("result", []):
+              m.TG_OFFSET = upd.get("update_id", 0) + 1
+              try:
+                  m.tg_answer(upd)
+              except Exception as e:
+                  print("خطا در پردازش:", e, flush=True)
+          print(f"پردازش {len(d.get('result', []))} دستور", flush=True)
+          PYEOF
